@@ -71,5 +71,28 @@ def chat_response(user_input):
     return response
 
 
-# Test the chatbot
-print(chat_response("Hello"))
+# -------------------------
+# Terminal Chat Interface
+# -------------------------
+
+
+def main():
+    print("=" * 50)
+    print("🤖 Welcome to Nexora AI!")
+    print("Type 'exit' to end the conversation.")
+    print("=" * 50)
+
+    while True:
+        user_input = input("\nYou: ")
+
+        if user_input.lower() in ["exit", "quit"]:
+            print("\nNexora: Goodbye! Have a great day.")
+            break
+
+        response = chat_response(user_input)
+
+        print(f"\nNexora: {response}")
+
+
+if __name__ == "__main__":
+    main()
