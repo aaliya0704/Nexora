@@ -16,3 +16,60 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 print("✅ Nexora is ready!")
+
+# -------------------------
+# Prompt Builder
+# -------------------------
+
+SYSTEM_PROMPT = (
+    "You are Nexora, a helpful, friendly, and intelligent AI assistant. "
+    "Answer clearly and accurately."
+)
+
+
+def build_prompt(user_input):
+    prompt = (
+        f"<|system|>\n{SYSTEM_PROMPT}</s>\n<|user|>\n{user_input}</s>\n<|assistant|>\n"
+    )
+
+    return prompt
+
+
+# -------------------------
+# Response Generator
+# -------------------------
+
+
+def generate_response(prompt):
+    # Convert prompt into tokens
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+    # Generate output tokens
+    output = model.generate(
+        **inputs, max_new_tokens=100, temperature=0.7, do_sample=True
+    )
+
+    # Remove the original prompt tokens
+    generated_tokens = output[0][inputs["input_ids"].shape[1] :]
+
+    # Decode only the newly generated tokens
+    response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+    return response.strip()
+
+
+# -------------------------
+# Chat Function
+# -------------------------
+
+
+def chat_response(user_input):
+    prompt = build_prompt(user_input)
+
+    response = generate_response(prompt)
+
+    return response
+
+
+# Test the chatbot
+print(chat_response("Hello"))
