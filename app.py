@@ -27,10 +27,24 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_prompt(user_input):
-    prompt = (
-        f"<|system|>\n{SYSTEM_PROMPT}</s>\n<|user|>\n{user_input}</s>\n<|assistant|>\n"
-    )
+# -------------------------
+# Conversation History
+# -------------------------
+
+conversation_history = []
+
+
+def build_prompt():
+    prompt = f"<|system|>\n{SYSTEM_PROMPT}</s>\n"
+
+    for message in conversation_history:
+        if message["role"] == "user":
+            prompt += f"<|user|>\n{message['content']}</s>\n"
+
+        elif message["role"] == "assistant":
+            prompt += f"<|assistant|>\n{message['content']}</s>\n"
+
+    prompt += "<|assistant|>\n"
 
     return prompt
 
@@ -64,9 +78,15 @@ def generate_response(prompt):
 
 
 def chat_response(user_input):
-    prompt = build_prompt(user_input)
+    # Store the user's message
+    conversation_history.append({"role": "user", "content": user_input})
+
+    prompt = build_prompt()
 
     response = generate_response(prompt)
+
+    # Store Nexora's reply
+    conversation_history.append({"role": "assistant", "content": response})
 
     return response
 
