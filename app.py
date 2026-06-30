@@ -1,11 +1,35 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    GenerationConfig,
+    TextIteratorStreamer,
+)
+from threading import Thread
 import torch
+
 
 # -------------------------
 # Model Configuration
 # -------------------------
 
-MODEL_NAME = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+# -------------------------
+# Generation Configuration
+# -------------------------
+
+MAX_NEW_TOKENS = 256
+TEMPERATURE = 0.7
+TOP_P = 0.9
+REPETITION_PENALTY = 1.1
+DO_SAMPLE = True
+
+generation_config = GenerationConfig(
+    max_new_tokens=MAX_NEW_TOKENS,
+    temperature=TEMPERATURE,
+    top_p=TOP_P,
+    repetition_penalty=REPETITION_PENALTY,
+    do_sample=DO_SAMPLE,
+)
 
 print("Loading tokenizer...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -15,7 +39,9 @@ model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME, torch_dtype="auto", device_map="auto"
 )
 
+
 print("✅ Nexora is ready!")
+
 
 # -------------------------
 # Prompt Builder
@@ -42,19 +68,24 @@ Guidelines:
 # -------------------------
 
 conversation_history = []
+MAX_HISTORY = 20
 
 
 def build_prompt():
-    prompt = f"<|system|>\n{SYSTEM_PROMPT}</s>\n"
+    messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT,
+        }
+    ]
 
-    for message in conversation_history:
-        if message["role"] == "user":
-            prompt += f"<|user|>\n{message['content']}</s>\n"
+    messages.extend(conversation_history)
 
-        elif message["role"] == "assistant":
-            prompt += f"<|assistant|>\n{message['content']}</s>\n"
-
-    prompt += "<|assistant|>\n"
+    prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
 
     return prompt
 
@@ -66,18 +97,38 @@ def build_prompt():
 
 def generate_response(prompt):
     # Convert prompt into tokens
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    inputs = tokenizer(prompt, return_tensors="pt")
 
-    # Generate output tokens
-    output = model.generate(
-        **inputs, max_new_tokens=100, temperature=0.7, do_sample=True
+    input_ids = inputs["input_ids"].to(model.device)
+    attention_mask = inputs["attention_mask"].to(model.device)
+
+    # Create the streamer
+    streamer = TextIteratorStreamer(
+        tokenizer,
+        skip_prompt=True,
+        skip_special_tokens=True,
     )
 
-    # Remove the original prompt tokens
-    generated_tokens = output[0][inputs["input_ids"].shape[1] :]
+    # Arguments for model.generate()
+    generation_kwargs = {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "generation_config": generation_config,
+        "streamer": streamer,
+    }
 
-    # Decode only the newly generated tokens
-    response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    # Run generation in a separate thread
+    thread = Thread(target=model.generate, kwargs=generation_kwargs)
+    thread.start()
+
+    # Collect the streamed text
+    response = ""
+
+    for new_text in streamer:
+        print(new_text, end="", flush=True)
+        response += new_text
+
+    print()  # Move to the next line after streaming finishes
 
     return response.strip()
 
@@ -97,6 +148,11 @@ def chat_response(user_input):
 
     # Store Nexora's reply
     conversation_history.append({"role": "assistant", "content": response})
+
+    if len(conversation_history) > MAX_HISTORY:
+        conversation_history[:] = conversation_history[-MAX_HISTORY:]
+
+    print(f"\nConversation History: {len(conversation_history)} messages")
 
     return response
 
@@ -119,9 +175,9 @@ def main():
             print("\nNexora: Goodbye! Have a great day.")
             break
 
-        response = chat_response(user_input)
+        print("\nNexora: ", end="", flush=True)
 
-        print(f"\nNexora: {response}")
+        chat_response(user_input)
 
 
 if __name__ == "__main__":
